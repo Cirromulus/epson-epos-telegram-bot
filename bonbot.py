@@ -14,6 +14,8 @@ PORT = 9100  # The port used by the server
 import logging
 from telegram import Update
 from telegram.ext import filters, ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler
+from io import BytesIO
+import asyncio
 
 import string
 import unicodedata
@@ -93,16 +95,29 @@ async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = not_connected
+    message = f"{not_connected} ({update})"
     if Globals.printerSocket:
         message = 'k'
         # TODO: De-emojify
+        # TODO: Formatting with 'MessageEntity'
         try:
             Globals.printer.println(update.message.text)
         except UnicodeEncodeError as e:
             message = f"{e}: Pls don't use that garbage here"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
+
+async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = context.bot.get_file(update.message.photo[-1].file_id)
+    message = f"got file {file}, downloading..."
+
+    f = await file
+
+    print (str(f))
+
+    # f = BytesIO(file.download_as_bytearray())
+
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(secrets["API_KEY"]).build()
@@ -111,6 +126,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('end', end))
     application.add_handler(CommandHandler('feed', feed))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), regularMessage))
+    application.add_handler(MessageHandler(filters.PHOTO, photo))
 
     application.run_polling()
 
