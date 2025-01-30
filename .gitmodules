@@ -1,0 +1,3 @@
+[submodule "epson-epos"]
+	path = epson-epos
+	url = git@github.com:Cirromulus/epson-epos.git
