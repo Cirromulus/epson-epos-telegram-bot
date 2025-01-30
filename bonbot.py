@@ -47,9 +47,41 @@ class Globals:
     printerSocket : socket = None
     printer : Printer = None
     default_resolution = Printer.Image.DD_8
+    last_user_id = None
+    print_user_changes = True
 
 not_connected = 'Printer is not connected.'
 
+def printAndUpdateIfNewUser(message):
+    user = message.chat
+    time = message.date
+
+    # import pdb; pdb.set_trace()
+
+    if hasattr(message, 'forward_origin') and message.forward_origin:
+        user = message.forward_origin.sender_user
+    elif hasattr(message, 'from_user') and message.from_user:
+        user = message.from_user
+
+    id = user.id
+    name = f"{user.first_name} {user.last_name}"
+
+    if not Globals.last_user_id or Globals.last_user_id != id:
+        printNewUser(name, time)
+        Globals.last_user_id = id
+
+def printNewUser(name, date):
+    if Globals.printerSocket:
+        Globals.printer.println(Just.RIGHT, BIGFONT, name)
+        Globals.printer.println(SMALLFONT, date.strftime("%Y-%m-%d %H:%M:%S"))
+        Globals.printer.print(Just.LEFT)
+        Globals.printer.feed(mm= 2)
+
+async def setUserEcho(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    Globals.print_user_changes = "on" in update.message.text
+    state = "on" if Globals.print_user_changes else "off"
+    message = f"Set printing user names to {Globals.print_user_changes}"
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "Connection was already set up."
@@ -59,14 +91,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             Globals.printerSocket.connect((HOST, PORT))
             Globals.printer = Printer(Globals.printerSocket)
             message = f"Connected to printer."
-
-            if not "noprint" in update.message.text:
-                user = update.message.chat
-                firstline = f"{user.first_name} {user.last_name}"
-                Globals.printer.println(BIGFONT, Just.CENTER, firstline)
-                Globals.printer.println(SMALLFONT, update.message.date.strftime("%Y-%m-%d %H:%M:%S"))
-                Globals.printer.print(Just.LEFT)
-                Globals.printer.feed(2)
 
         except socket.error as e:
             message = str(e)
@@ -83,6 +107,11 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
         Globals.printerSocket = None
         message = "Successfully closed connection."
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
+async def setLog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = ""
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
 
 async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
@@ -102,6 +131,8 @@ async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"{not_connected} ({update})"
     if Globals.printerSocket:
+        printAndUpdateIfNewUser(update.message)
+
         message = 'k'
         # TODO: De-emojify
         # TODO: Formatting with 'MessageEntity'
@@ -166,6 +197,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('end', end))
     application.add_handler(CommandHandler('feed', feed))
     application.add_handler(CommandHandler('setres', setRes))
+    application.add_handler(CommandHandler('setUserEcho', setUserEcho))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), regularMessage))
     application.add_handler(MessageHandler(filters.PHOTO, photo))
 
