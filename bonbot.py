@@ -46,6 +46,7 @@ logging.basicConfig(
 class Globals:
     printerSocket : socket = None
     printer : Printer = None
+    default_resolution = Printer.Image.DD_8
 
 not_connected = 'Printer is not connected.'
 
@@ -59,12 +60,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             Globals.printer = Printer(Globals.printerSocket)
             message = f"Connected to printer."
 
-            user = update.message.chat
-            firstline = f"{user.first_name} {user.last_name}"
-            Globals.printer.println(BIGFONT, Just.CENTER, firstline)
-            Globals.printer.println(SMALLFONT, update.message.date.strftime("%Y-%m-%d %H:%M:%S"))
-            Globals.printer.print(Just.LEFT)
-            Globals.printer.feed(2)
+            if not "noprint" in update.message.text:
+                user = update.message.chat
+                firstline = f"{user.first_name} {user.last_name}"
+                Globals.printer.println(BIGFONT, Just.CENTER, firstline)
+                Globals.printer.println(SMALLFONT, update.message.date.strftime("%Y-%m-%d %H:%M:%S"))
+                Globals.printer.print(Just.LEFT)
+                Globals.printer.feed(2)
 
         except socket.error as e:
             message = str(e)
@@ -75,8 +77,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
     if Globals.printerSocket:
-        # TODO: Make feed optional.
-        Globals.printer.print(defaultCut.FEED_CUT())
+        if not "nocut" in update.message.text:
+            Globals.printer.print(defaultCut.FEED_CUT())
         Globals.printerSocket.close()
         Globals.printerSocket = None
         message = "Successfully closed connection."
@@ -104,11 +106,10 @@ async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TODO: De-emojify
         # TODO: Formatting with 'MessageEntity'
         try:
-            Globals.printer.println(update.message.text)
+            Globals.printer.println(BIGFONT, update.message.text)
         except UnicodeEncodeError as e:
             message = f"{e}: Pls don't use that garbage here"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
-
 
 
 resolutions = {
@@ -118,22 +119,30 @@ resolutions = {
     "dd_24" : Printer.Image.DD_24,
 }
 
+async def setRes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    command = update.message.text.replace('/setres', '').strip()
+    message = ""
+    if command in resolutions.keys():
+        Globals.default_resolution = resolutions[command]
+        message = f"Successfully set default resolution.\n"
+    else:
+        message += f"Invalid resolution {command}.\n"
+        message += f"Use one of '{[k for k in resolutions.keys()]}'\n"
+
+    message += f"Current default resolution: {Globals.default_resolution}"
+
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = f"{not_connected} ({update})\n"
 
     if Globals.printerSocket:
-        resolution = Printer.Image.DD_8
+        resolution = Globals.default_resolution
         message = ""
+        caption = ""
 
-        if update.message.caption:
-            if update.message.caption not in resolutions.keys():
-                message += f"Invalid resolution {update.message.caption}.\n"
-                message += f"Use one of '{resolutions.keys()}'"
-            else:
-                resolution = resolutions[update.message.caption]
-
-        message += f"Using resolution {resolution}\n"
+        message += f"Using resolution {resolution} (change that with /setres ..)\n"
 
         download = await context.bot.get_file(update.message.photo[-1].file_id)
         await context.bot.send_message(chat_id=update.effective_chat.id,
@@ -145,7 +154,8 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image = Printer.Image(BytesIO(rawImage), resolution=resolution)
         message += f"Printing...."
         Globals.printer.printImage(image, ugly_workaround=resolution.bits_per_line != 8)
-
+        if len(caption) > 0:
+            Globals.printer.println(SMALLFONT, Just.LEFT, caption)
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
@@ -155,6 +165,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('end', end))
     application.add_handler(CommandHandler('feed', feed))
+    application.add_handler(CommandHandler('setres', setRes))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), regularMessage))
     application.add_handler(MessageHandler(filters.PHOTO, photo))
 
