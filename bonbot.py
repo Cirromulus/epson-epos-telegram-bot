@@ -44,8 +44,8 @@ logging.basicConfig(
 )
 
 class Globals:
-    printerSocket = None
-    printer = None
+    printerSocket : socket = None
+    printer : Printer = None
 
 not_connected = 'Printer is not connected.'
 
@@ -78,19 +78,22 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TODO: Make feed optional.
         Globals.printer.print(defaultCut.FEED_CUT())
         Globals.printerSocket.close()
+        Globals.printerSocket = None
         message = "Successfully closed connection."
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
     if Globals.printerSocket:
-        message = 'k'
         mm = 1
-        if "mm" in update.message.text:
+        command = update.message.text.replace('/feed', '')
+        if len(command) > 1:
             try:
-                mm = int(update.message.text.strip(string.ascii_letters))
+                mm = int(command.strip(string.ascii_letters))
             except:
                 message = f"Could not parse {update.message.text} as int."
+                message += f"\n{update}"
+        message = f'Advancing {mm}mm'
         Globals.printer.feed(mm=mm)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
@@ -108,16 +111,26 @@ async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file = context.bot.get_file(update.message.photo[-1].file_id)
-    message = f"got file {file}, downloading..."
+    message = f"{not_connected} ({update})"
+    if Globals.printerSocket:
 
-    f = await file
+        download = await context.bot.get_file(update.message.photo[-1].file_id)
+        message = f"got file {download}, downloading..."
 
-    print (str(f))
+        print (str(download))
 
-    # f = BytesIO(file.download_as_bytearray())
+        rawImage = await download.download_as_bytearray()
 
-    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+        # print (rawImage)
+
+        image = Printer.Image(BytesIO(rawImage)  , resolution=Printer.Image.DD_8)
+
+        print (image)
+
+        Globals.printer.printImage(image)
+
+
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token(secrets["API_KEY"]).build()
