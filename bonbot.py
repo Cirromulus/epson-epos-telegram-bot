@@ -110,24 +110,41 @@ async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 
+
+resolutions = {
+    "sd_8" : Printer.Image.SD_8,
+    "dd_8" : Printer.Image.DD_8,
+    "sd_24" : Printer.Image.SD_24,
+    "dd_24" : Printer.Image.DD_24,
+}
+
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = f"{not_connected} ({update})"
+
+    message = f"{not_connected} ({update})\n"
+
     if Globals.printerSocket:
+        resolution = Printer.Image.DD_8
+        message = ""
+
+        if update.message.caption:
+            if update.message.caption not in resolutions.keys():
+                message += f"Invalid resolution {update.message.caption}.\n"
+                message += f"Use one of '{resolutions.keys()}'"
+            else:
+                resolution = resolutions[update.message.caption]
+
+        message += f"Using resolution {resolution}\n"
 
         download = await context.bot.get_file(update.message.photo[-1].file_id)
-        message = f"got file {download}, downloading..."
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                           text=f"got file {download}, downloading...")
 
         print (str(download))
 
         rawImage = await download.download_as_bytearray()
-
-        # print (rawImage)
-
-        image = Printer.Image(BytesIO(rawImage)  , resolution=Printer.Image.DD_8)
-
-        print (image)
-
-        Globals.printer.printImage(image)
+        image = Printer.Image(BytesIO(rawImage), resolution=resolution)
+        message += f"Printing...."
+        Globals.printer.printImage(image, ugly_workaround=resolution.bits_per_line != 8)
 
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
