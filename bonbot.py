@@ -42,7 +42,16 @@ def printAndUpdateIfNewUser(message):
     # import pdb; pdb.set_trace()
 
     if hasattr(message, 'forward_origin') and message.forward_origin:
-        user = message.forward_origin.sender_user
+        if hasattr(message.forward_origin, "sender_user"):
+            user = message.forward_origin.sender_user
+        elif hasattr(message.forward_origin, "sender_user_name"):
+            class AnonUser:
+                def __init__(self, name):
+                    self.first_name = name
+                    self.last_name = None
+                    self.id = hash(name)
+
+            user = AnonUser(message.forward_origin.sender_user_name)
     elif hasattr(message, 'from_user') and message.from_user:
         user = message.from_user
 
@@ -146,17 +155,23 @@ def deEmojify(inputString):
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"{not_connected} ({update})"
     if Globals.printer:
-        printAndUpdateIfNewUser(update.message)
-
-        message = f'k: {update.message.message_id}'
+        message = ""
+        try:
+            printAndUpdateIfNewUser(update.message)
+        except Exception as e:
+            message += f"Could not print new user.\n{update.message}\n{e}"
 
         # TODO: use entities (italic, bold, etc)
         text = deEmojify(update.message.text)
 
         try:
             Globals.printer.println(BIGFONT, text)
+            Globals.printer.feed(2)
+            message += f'k: {update.message.message_id}'
         except UnicodeEncodeError as e:
-            message = f"{e}: Pls don't use that garbage here"
+            message += f"{e} in {text}: Pls don't use that garbage here"
+        except Exception as e:
+            message += f"{e} in {text}, ehmm?"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 
