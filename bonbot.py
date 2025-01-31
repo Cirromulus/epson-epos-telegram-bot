@@ -47,7 +47,9 @@ def printAndUpdateIfNewUser(message):
         user = message.from_user
 
     id = user.id
-    name = f"{user.first_name} {user.last_name}"
+    name = str(user.first_name)
+    if user.last_name:
+        name += " " + str(user.last_name)
 
     if not Globals.last_user_id or Globals.last_user_id != id:
         printNewUser(name, time)
@@ -148,7 +150,7 @@ async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         message = f'k: {update.message.message_id}'
 
-        # TODO: use entities
+        # TODO: use entities (italic, bold, etc)
         text = deEmojify(update.message.text)
 
         try:
