@@ -36,6 +36,14 @@ class Globals:
 not_connected = 'Printer is not connected.'
 
 def maybeConnect() -> str:
+    if Globals.printer:
+        try:
+           Globals.printer.getStatus()
+        except Exception as e:
+            print (f"Could not get printer status: {e}.")
+            print (f"trying re-connect")
+            Globals.printer = None
+
     if not Globals.printer:
         try:
             newsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -219,9 +227,14 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rawImage = await download.download_as_bytearray()
         image = Printer.Image(BytesIO(rawImage), resolution=resolution)
         message += f"Printing...."
-        Globals.printer.printImage(image, ugly_workaround=resolution.bits_per_line != 8)
-        if len(caption) > 0:
-            Globals.printer.println(SMALLFONT, Just.LEFT, caption)
+        try:
+            Globals.printer.printImage(image, ugly_workaround=resolution.bits_per_line != 8)
+            if len(caption) > 0:
+                Globals.printer.println(SMALLFONT, Just.LEFT, caption)
+        except BrokenPipeError as e:
+            message += f"\nSocket error during printing. Probably just timed out. TODO: Reconnect.\n{e}"
+        except Exception as e:
+            message += f"\nError during printing.\n{e}"
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
@@ -236,6 +249,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "__" in name:
             continue
         message += f"{name}: {getattr(Globals, name)}\n"
+    message += "Printer Status: "
+    try:
+         message += f"{Globals.printer.getStatus()}"
+    except Exception as e:
+        message += f"Error. Disconnected? {e}"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 if __name__ == '__main__':
