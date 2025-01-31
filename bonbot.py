@@ -35,6 +35,20 @@ class Globals:
 
 not_connected = 'Printer is not connected.'
 
+def maybeConnect() -> str:
+    if not Globals.printer:
+        try:
+            newsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            newsock.settimeout(Globals.sock_timeout_s)
+            newsock.connect((HOST, PORT))
+            Globals.printer = Printer(newsock)
+            return f"Connected to printer."
+
+        except socket.error as e:
+            Globals.printer = None
+            return str(e)
+    return None
+
 def printAndUpdateIfNewUser(message):
     user = message.chat
     time = message.date
@@ -78,32 +92,20 @@ async def setUserEcho(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = "Connection was already set up."
-    if not Globals.printer:
-        try:
-            newsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            newsock.settimeout(Globals.sock_timeout_s)
-            newsock.connect((HOST, PORT))
-            Globals.printer = Printer(newsock)
-            message = f"Connected to printer."
-
-        except socket.error as e:
-            message = str(e)
-            Globals.printer = None
-
+    message = maybeConnect() or "Connection was already set up."
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = not_connected
+    message = maybeConnect() or ""
     if Globals.printer:
         Globals.printer.print(defaultCut.FEED_CUT())
-        message = "k (ut)"
+        message += "k (ut)"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
     if Globals.printer:
-        Globals.printer.close()
+        Globals.printer.socket.close()
         Globals.printer = None
         message = "Successfully closed connection."
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
@@ -114,7 +116,7 @@ async def setLog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = not_connected
+    message = maybeConnect() or ""
     if Globals.printer:
         mm = 1
         command = update.message.text.replace('/feed', '')
@@ -153,9 +155,8 @@ def deEmojify(inputString):
     return returnString
 
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = f"{not_connected} ({update})"
+    message = maybeConnect() or ""
     if Globals.printer:
-        message = ""
         try:
             printAndUpdateIfNewUser(update.message)
         except Exception as e:
@@ -172,6 +173,9 @@ async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message += f"{e} in {text}: Pls don't use that garbage here"
         except Exception as e:
             message += f"{e} in {text}, ehmm?"
+    else:
+        # not connected.
+        message += f"Perhaps this helps:\n{update}"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 
@@ -197,8 +201,7 @@ async def setRes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    message = f"{not_connected} ({update})\n"
+    message = maybeConnect() or ""
 
     if Globals.printer:
         resolution = Globals.default_resolution
@@ -224,7 +227,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"one of\n"
-    message += "\n".join(['start', 'end', 'feed', 'setres', 'setUserEcho', 'cut', 'help'])
+    message += "\n".join(['start', 'end', 'feed', 'setres', 'setUserEcho', 'cut', 'help', 'status'])
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -278,4 +281,25 @@ Update(
         supergroup_chat_created=False,
         text='formatted BOB'),
     update_id=225771877)
+"""
+
+"""
+TODO: Auto connect and disconnect:
+
+def callback_auto_message(context):
+    context.bot.send_message(chat_id='12345678', text='Automatic message!')
+
+
+def start_auto_messaging(update, context):
+    chat_id = update.message.chat_id
+    context.job_queue.run_repeating(callback_auto_message, 10, context=chat_id, name=str(chat_id))
+    # context.job_queue.run_once(callback_auto_message, 3600, context=chat_id)
+    # context.job_queue.run_daily(callback_auto_message, time=datetime.time(hour=9, minute=22), days=(0, 1, 2, 3, 4, 5, 6), context=chat_id)
+
+
+def stop_notify(update, context):
+    chat_id = update.message.chat_id
+    context.bot.send_message(chat_id=chat_id, text='Stopping automatic messages!')
+    job = context.job_queue.get_jobs_by_name(str(chat_id))
+    job[0].schedule_removal()
 """
