@@ -40,15 +40,15 @@ def deEmojify(inputString):
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.ERROR
+    level=logging.WARN
 )
 
 class Globals:
-    printerSocket : socket = None
     printer : Printer = None
     default_resolution = Printer.Image.DD_8
     last_user_id = None
     print_user_changes = True
+    sock_timeout_s = 5
 
 not_connected = 'Printer is not connected.'
 
@@ -71,7 +71,7 @@ def printAndUpdateIfNewUser(message):
         Globals.last_user_id = id
 
 def printNewUser(name, date):
-    if Globals.printerSocket:
+    if Globals.printer:
         Globals.printer.println(Just.RIGHT, BIGFONT, name)
         Globals.printer.println(SMALLFONT, date.strftime("%Y-%m-%d %H:%M:%S"))
         Globals.printer.print(Just.LEFT)
@@ -85,31 +85,32 @@ async def setUserEcho(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "Connection was already set up."
-    if not Globals.printerSocket:
+    if not Globals.printer:
         try:
-            Globals.printerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            Globals.printerSocket.connect((HOST, PORT))
-            Globals.printer = Printer(Globals.printerSocket)
+            newsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            newsock.settimeout(Globals.sock_timeout_s)
+            newsock.connect((HOST, PORT))
+            Globals.printer = Printer(newsock)
             message = f"Connected to printer."
 
         except socket.error as e:
             message = str(e)
-            Globals.printerSocket = None
+            Globals.printer = None
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
-    if Globals.printerSocket:
+    if Globals.printer:
         Globals.printer.print(defaultCut.FEED_CUT())
         message = "k (ut)"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
-    if Globals.printerSocket:
-        Globals.printerSocket.close()
-        Globals.printerSocket = None
+    if Globals.printer:
+        Globals.printer.close()
+        Globals.printer = None
         message = "Successfully closed connection."
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
@@ -120,7 +121,7 @@ async def setLog(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = not_connected
-    if Globals.printerSocket:
+    if Globals.printer:
         mm = 1
         command = update.message.text.replace('/feed', '')
         if len(command) > 1:
@@ -135,7 +136,7 @@ async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"{not_connected} ({update})"
-    if Globals.printerSocket:
+    if Globals.printer:
         printAndUpdateIfNewUser(update.message)
 
         message = 'k'
@@ -173,7 +174,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = f"{not_connected} ({update})\n"
 
-    if Globals.printerSocket:
+    if Globals.printer:
         resolution = Globals.default_resolution
         message = ""
         caption = ""
@@ -200,6 +201,14 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message += "\n".join(['start', 'end', 'feed', 'setres', 'setUserEcho', 'cut', 'help'])
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = ""
+    for name in dir(Globals):
+        if "__" in name:
+            continue
+        message += f"{name}: {getattr(Globals, name)}\n"
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+
 if __name__ == '__main__':
     application = ApplicationBuilder().token(secrets["API_KEY"]).build()
 
@@ -210,6 +219,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler('setUserEcho', setUserEcho))
     application.add_handler(CommandHandler('cut', cut))
     application.add_handler(CommandHandler('help', help))
+    application.add_handler(CommandHandler('status', status))
     application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), regularMessage))
     application.add_handler(MessageHandler(filters.PHOTO, photo))
 
