@@ -21,23 +21,6 @@ import string
 import unicodedata
 from unidecode import unidecode
 
-def deEmojify(inputString):
-    returnString = ""
-
-    for character in inputString:
-        try:
-            character.encode("ascii")
-            returnString += character
-        except UnicodeEncodeError:
-            replaced = unidecode(str(character))
-            if replaced != '':
-                returnString += replaced
-            else:
-                try:
-                     returnString += "[" + unicodedata.name(character) + "]"
-                except ValueError:
-                     returnString += "[x]"
-
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.WARN
@@ -134,16 +117,42 @@ async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
         Globals.printer.feed(mm=mm)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
+
+def deEmojify(inputString):
+    returnString = ""
+
+    encoding = 'ascii'
+    if Globals.printer:
+        encoding = Globals.printer.encoding
+
+    for character in inputString:
+        try:
+            character.encode(encoding)
+            returnString += character
+        except UnicodeEncodeError:
+            replaced = unidecode(str(character))
+            if replaced != '':
+                returnString += replaced
+            else:
+                try:
+                     returnString += "[" + unicodedata.name(character) + "]"
+                except ValueError:
+                     returnString += "[x]"
+
+    return returnString
+
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"{not_connected} ({update})"
     if Globals.printer:
         printAndUpdateIfNewUser(update.message)
 
-        message = 'k'
-        # TODO: De-emojify
-        # TODO: Formatting with 'MessageEntity'
+        message = f'k: {update.message.message_id}'
+
+        # TODO: use entities
+        text = deEmojify(update.message.text)
+
         try:
-            Globals.printer.println(BIGFONT, update.message.text)
+            Globals.printer.println(BIGFONT, text)
         except UnicodeEncodeError as e:
             message = f"{e}: Pls don't use that garbage here"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
