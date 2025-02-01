@@ -290,7 +290,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if Globals.printer:
         resolution = user.resolution
         message = ""
-        caption = ""
+        caption = update.message.caption
 
         message += f"Using resolution {resolution} (change that with /setres ..)\n"
 
