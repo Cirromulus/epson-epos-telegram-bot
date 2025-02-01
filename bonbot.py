@@ -280,10 +280,15 @@ async def setRes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = getUser(update.message.chat.id)
+    if not user:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=not_registered)
+        return
+
     message = maybeConnect() or ""
 
     if Globals.printer:
-        resolution = Globals.default_resolution
+        resolution = user.resolution
         message = ""
         caption = ""
 
