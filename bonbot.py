@@ -342,9 +342,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
         message += f"\n  {name}: {getattr(Globals, name)}"
 
+    message += maybeConnect() or ""
+
     message += "\nPrinter Status: "
     try:
-         message += f"\n  {Globals.printer.getStatus()}"
+        stati = Globals.printer.getStatus()
+        for status in stati:
+            message += f"\n  {str(status)}"
     except Exception as e:
         message += f"Error. Disconnected? {e}"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
