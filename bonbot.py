@@ -7,7 +7,7 @@ assert(secrets["API_KEY"])
 if "USER_PW" not in secrets or len(secrets["USER_PW"]) == 0:
     print ("WARN: No 'USER_PW' given. Allowing everyone!")
 else:
-    print (f"Userpassword: '{secrets["USER_PW"]}'")
+    print (f"Userpassword: '{secrets['USER_PW']}'")
 
 from py_epos.printer import *
 import socket
