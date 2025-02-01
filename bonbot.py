@@ -4,6 +4,11 @@ from dotenv import dotenv_values
 secrets = dotenv_values(".env")
 assert(secrets["API_KEY"])
 
+if "USER_PW" not in secrets or len(secrets["USER_PW"]) == 0:
+    print ("WARN: No 'USER_PW' given. Allowing everyone!")
+else:
+    print (f"Userpassword: '{secrets["USER_PW"]}'")
+
 from py_epos.printer import *
 import socket
 
@@ -26,14 +31,30 @@ logging.basicConfig(
     level=logging.WARN
 )
 
+class User:
+    def __init__(self):
+        self.resolution = Printer.Image.DD_8
+        self.last_printed_user_id = None
+        self.print_user_changes = True
+
 class Globals:
     printer : Printer = None
-    default_resolution = Printer.Image.DD_8
-    last_user_id = None
-    print_user_changes = True
-    sock_timeout_s = 5
+    sock_timeout_s : int = 5
+    users : dict = {}
+    has_password : bool = "USER_PW" in secrets and len(secrets["USER_PW"]) > 0
 
 not_connected = 'Printer is not connected.'
+not_registered = "You are not registered.\nUse `/start [pw]`"
+
+def getUser(id : int) -> User:
+    if id in Globals.users:
+        return Globals.users[id]
+    else:
+        return None
+
+def getParameters(text : str):
+    return [param for param in text.split() if not "/" in param]
+
 
 def maybeConnect() -> str:
     if Globals.printer:
@@ -57,15 +78,13 @@ def maybeConnect() -> str:
             return str(e)
     return None
 
-def printAndUpdateIfNewUser(message):
-    user = message.chat
+def printAndUpdateIfNewUser(user: User, message):
+    sender = message.chat
     time = message.date
-
-    # import pdb; pdb.set_trace()
 
     if hasattr(message, 'forward_origin') and message.forward_origin:
         if hasattr(message.forward_origin, "sender_user"):
-            user = message.forward_origin.sender_user
+            sender = message.forward_origin.sender_user
         elif hasattr(message.forward_origin, "sender_user_name"):
             class AnonUser:
                 def __init__(self, name):
@@ -73,18 +92,18 @@ def printAndUpdateIfNewUser(message):
                     self.last_name = None
                     self.id = hash(name)
 
-            user = AnonUser(message.forward_origin.sender_user_name)
+            sender = AnonUser(message.forward_origin.sender_user_name)
     elif hasattr(message, 'from_user') and message.from_user:
-        user = message.from_user
+        sender = message.from_user
 
-    id = user.id
-    name = str(user.first_name)
-    if user.last_name:
-        name += " " + str(user.last_name)
+    id = sender.id
 
-    if not Globals.last_user_id or Globals.last_user_id != id:
+    if not user.last_printed_user_id or user.last_printed_user_id != id:
+        name = str(sender.first_name)
+        if sender.last_name:
+            name += " " + str(sender.last_name)
         printNewUser(name, time)
-        Globals.last_user_id = id
+        user.last_printed_user_id = id
 
 def printNewUser(name, date):
     if Globals.printer:
@@ -94,16 +113,51 @@ def printNewUser(name, date):
         Globals.printer.feed(mm= 2)
 
 async def setUserEcho(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    Globals.print_user_changes = "on" in update.message.text
-    state = "on" if Globals.print_user_changes else "off"
-    message = f"Set printing user names to {Globals.print_user_changes}"
+    user = getUser(update.message.chat.id)
+    if not user:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=not_registered)
+        return
+
+    message = ""
+    if "on" in update.message.text:
+        user.print_user_changes = True
+    elif "off" in update.message.text:
+        user.print_user_changes = False
+    else:
+        message += f"Neither 'on' nor 'off' read.\nIgnoring your rumblings about '{update.message.text}'\n"
+
+    state = "on" if user.print_user_changes else "off"
+    message += f"Printing user names: {state}"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = maybeConnect() or "Connection was already set up."
+    user = getUser(update.message.chat.id)
+    message = ""
+    if user:
+        message = f"You are already registered"
+    else:
+        may_log_in = not Globals.has_password
+        if Globals.has_password:
+            passwd = getParameters(update.message.text)
+            if len(passwd) == 0:
+                message = f"No password given. No cookies."
+            elif passwd[0] != secrets["USER_PW"]:
+                message = f"Invalid password given"
+            else:
+                may_log_in = True
+
+        if may_log_in:
+            Globals.users[update.message.chat.id] = User()
+            message = f"Successfully registered."
+
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = getUser(update.message.chat.id)
+    if not user:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=not_registered)
+        return
+
     message = maybeConnect() or ""
     if Globals.printer:
         Globals.printer.print(defaultCut.FEED_CUT())
@@ -111,15 +165,11 @@ async def cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = not_connected
-    if Globals.printer:
-        Globals.printer.socket.close()
-        Globals.printer = None
-        message = "Successfully closed connection."
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
-
-async def setLog(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = ""
+    message = "You have never been registered, lol"
+    user = getUser(update.message.chat.id)
+    if user:
+        del Globals.users[update.message.chat.id]
+        message = "You have been successfully removed from list"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 
@@ -127,15 +177,21 @@ async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = maybeConnect() or ""
     if Globals.printer:
         mm = 1
-        command = update.message.text.replace('/feed', '')
-        if len(command) > 1:
+        commands = getParameters(update.message.text)
+        if len(commands) != 1:
+            message += f"Invalid number of parameters. Got {len(commands)}"
+        else:
+            command  = commands[0]
             try:
                 mm = int(command.strip(string.ascii_letters))
             except:
-                message = f"Could not parse {update.message.text} as int."
+                message += f"Could not parse {update.message.text} as int."
                 message += f"\n{update}"
-        message = f'Advancing {mm}mm'
-        Globals.printer.feed(mm=mm)
+            message += f'Advancing {mm}mm'
+        try:
+            Globals.printer.feed(mm=mm)
+        except Exception as e:
+            message += f"\nCould not feed forward:\n{e}"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 
@@ -163,10 +219,18 @@ def deEmojify(inputString):
     return returnString
 
 async def regularMessage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = getUser(update.message.chat.id)
+    if not user:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=not_registered)
+        return
+
     message = maybeConnect() or ""
+    if len(message) > 1:
+        message += "\n" # dirty
+
     if Globals.printer:
         try:
-            printAndUpdateIfNewUser(update.message)
+            printAndUpdateIfNewUser(user, update.message)
         except Exception as e:
             message += f"Could not print new user.\n{update.message}\n{e}"
 
@@ -195,16 +259,23 @@ resolutions = {
 }
 
 async def setRes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    command = update.message.text.replace('/setres', '').strip()
-    message = ""
-    if command in resolutions.keys():
-        Globals.default_resolution = resolutions[command]
-        message = f"Successfully set default resolution.\n"
-    else:
-        message += f"Invalid resolution {command}.\n"
-        message += f"Use one of '{[k for k in resolutions.keys()]}'\n"
+    user = getUser(update.message.chat.id)
+    if not user:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=not_registered)
+        return
 
-    message += f"Current default resolution: {Globals.default_resolution}"
+    message = ""
+    commands = getParameters(update.message.text)
+    if len(commands) != 1:
+        message = f"Invalid number of commands. Expected: 1, got: {len(commands)}"
+    elif commands[0] in resolutions.keys():
+        user.resolution = resolutions[commands[0]]
+        message = f"Successfully set default resolution."
+    else:
+        message += f"Invalid resolution {commands[0]}.\n"
+        message += f"Use one of '{[k for k in resolutions.keys()]}'"
+
+    message += f"\nCurrent resolution: {user.resolution}"
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
@@ -240,18 +311,40 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = f"one of\n"
-    message += "\n".join(['start', 'end', 'feed', 'setres', 'setUserEcho', 'cut', 'help', 'status'])
+    message += "\n".join([
+        '/start',
+        '/end',
+        '/feed',
+        '/setRes',
+        '/setUserEcho',
+        '/cut',
+        '/help',
+        '/status'
+    ])
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = ""
+    user = getUser(update.message.chat.id)
+    if not user:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=not_registered)
+        return
+
+    message = "User settings:"
+
+    for name in dir(user):
+        if "__" in name:
+            continue
+        message += f"\n  {name}: {getattr(user, name)}"
+
+    message += "\nGlobal Settings: "
     for name in dir(Globals):
         if "__" in name:
             continue
-        message += f"{name}: {getattr(Globals, name)}\n"
-    message += "Printer Status: "
+        message += f"\n  {name}: {getattr(Globals, name)}"
+
+    message += "\nPrinter Status: "
     try:
-         message += f"{Globals.printer.getStatus()}"
+         message += f"\n  {Globals.printer.getStatus()}"
     except Exception as e:
         message += f"Error. Disconnected? {e}"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
