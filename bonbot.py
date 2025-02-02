@@ -59,7 +59,13 @@ def getParameters(text : str):
 def maybeConnect() -> str:
     if Globals.printer:
         try:
-           Globals.printer.getStatus()
+            msg = ""
+            stati = Globals.printer.getStatus([Printer.Paper])
+            if stati[Printer.Paper].isNearEnd():
+                msg += f"Notice: Paper is near end\n"
+            if stati[Printer.Paper].isPresent():
+                msg += f"Warn: Printer reports no paper\n"
+            return msg
         except Exception as e:
             print (f"Could not get printer status: {e}.")
             print (f"trying re-connect")
@@ -289,8 +295,7 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if Globals.printer:
         resolution = user.resolution
-        message = ""
-        caption = update.message.caption
+        caption = update.message.caption or ""
 
         message += f"Using resolution {resolution} (change that with /setres ..)\n"
 
@@ -347,12 +352,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
         message += f"\n  {name}: {getattr(Globals, name)}"
 
+    message += "\n"
     message += maybeConnect() or ""
 
     message += "\nPrinter Status: "
     try:
         stati = Globals.printer.getStatus()
-        for status in stati:
+        for status in stati.values():
             message += f"\n  {str(status)}"
     except Exception as e:
         message += f"Error. Disconnected? {e}"
