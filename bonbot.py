@@ -201,7 +201,7 @@ async def feed(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 
-def deEmojify(inputString):
+def deEmojify(inputString, defaultFont = BIGFONT):
     returnString = ""
 
     encoding = 'ascii'
@@ -217,10 +217,12 @@ def deEmojify(inputString):
             if replaced != '':
                 returnString += replaced
             else:
+                returnString += SMALLFONT
                 try:
                      returnString += "[" + unicodedata.name(character) + "]"
                 except ValueError:
                      returnString += "[x]"
+                returnString += defaultFont
 
     return returnString
 
