@@ -55,7 +55,6 @@ def getUser(id : int) -> User:
 def getParameters(text : str):
     return [param for param in text.split() if not "/" in param]
 
-
 def maybeConnect() -> str:
     if Globals.printer:
         try:
@@ -89,6 +88,7 @@ def printAndUpdateIfNewUser(user: User, message):
     time = message.date
 
     if hasattr(message, 'forward_origin') and message.forward_origin:
+        time = message.forward_origin.date
         if hasattr(message.forward_origin, "sender_user"):
             sender = message.forward_origin.sender_user
         elif hasattr(message.forward_origin, "sender_user_name"):
@@ -407,6 +407,50 @@ Update(
         supergroup_chat_created=False,
         text='formatted BOB'),
     update_id=225771877)
+"""
+
+"""
+Message(
+    api_kwargs={
+        'forward_date': 1736339977,
+        'forward_from': {
+            'id': 608950592,
+            'is_bot': False,
+            'first_name': 'Lukers',
+            'username': 'Keesebrot'
+            }
+    },
+    channel_chat_created=False
+    chat=Chat(
+        first_name='Pascal',
+        id=170554685,
+        last_name='(optional)',
+        type=<ChatType.PRIVATE>,
+        username='Urinator'),
+    date=datetime.datetime(2025, 2, 2, 16, 21, 14, tzinfo=datetime.timezone.utc),
+    delete_chat_photo=False,
+    entities=(MessageEntity(length=53, offset=242, type=<MessageEntityType.URL>),),
+    forward_origin=MessageOriginUser(
+        date=datetime.datetime(2025, 1, 8, 12, 39, 37, tzinfo=datetime.timezone.utc),
+        sender_user=User(
+            first_name='Lukers',
+            id=608950592,
+            is_bot=False,
+            username='Keesebrot'),
+        type=<MessageOriginType.USER>),0
+        from_user=User(
+            first_name='Pascal',
+            id=170554685,
+            is_bot=False,0
+            language_code='de',
+            last_name='(optional)',
+            username='Urinator'),
+        group_chat_created=False,
+        link_preview_options=LinkPreviewOptions(is_disabled=True),
+        message_id=890,
+        supergroup_chat_created=False,
+        text='Emma und ich...'
+)
 """
 
 """
