@@ -274,14 +274,20 @@ async def setRes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     message = ""
     commands = getParameters(update.message.text)
+    err = True
     if len(commands) != 1:
         message = f"Invalid number of commands. Expected: 1, got: {len(commands)}"
     elif commands[0] in resolutions.keys():
         user.resolution = resolutions[commands[0]]
         message = f"Successfully set default resolution."
+        err = False
     else:
         message += f"Invalid resolution {commands[0]}.\n"
-        message += f"Use one of '{[k for k in resolutions.keys()]}'"
+
+    if err:
+        message += f"\nUse one of:"
+        for k in resolutions.keys():
+            message += f"\n    /setres {k}"
 
     message += f"\nCurrent resolution: {user.resolution}"
 
