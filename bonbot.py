@@ -36,6 +36,7 @@ class User:
         self.resolution = Printer.Image.DD_8
         self.last_printed_user_id = None
         self.print_user_changes = True
+        self.image_autocut = False
 
 class Globals:
     printer : Printer = None
@@ -165,9 +166,15 @@ async def cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     message = maybeConnect() or ""
-    if Globals.printer:
-        Globals.printer.print(defaultCut.FEED_CUT())
-        message += "k (ut)"
+
+    if 'autocut' in update.message.text:
+        message += "Interpreting as 'set autocut' command ('on' for on, everything else for off)"
+        user.image_autocut = 'on' in update.message.text
+        message += "\nImage autocut is now " + ('on' if user.image_autocut else 'off')
+    else:
+        if Globals.printer:
+            Globals.printer.print(defaultCut.FEED_CUT())
+            message += "k (ut)"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message)
 
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -320,6 +327,10 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             Globals.printer.printImage(image, ugly_workaround=resolution.bits_per_line != 8)
             if len(caption) > 0:
                 Globals.printer.println(SMALLFONT, Just.LEFT, caption)
+            if user.image_autocut:
+                message += "\nautocut is on, so also cutting."
+                Globals.printer.print(defaultCut.FEED_CUT())
+            message += " Sent."
         except BrokenPipeError as e:
             message += f"\nSocket error during printing. Probably just timed out. TODO: Reconnect.\n{e}"
         except Exception as e:
