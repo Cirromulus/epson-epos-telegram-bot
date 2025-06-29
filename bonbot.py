@@ -346,7 +346,7 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         '/feed',
         '/setRes',
         '/setUserEcho',
-        '/cut',
+        '/cut [autocut <on|off>]',
         '/help',
         '/status'
     ])
