@@ -17,8 +17,13 @@ pid=$(cat ${pidfile})
 
 usage()
 {
-	echo "Usage: $0 <start,stop>"
+	echo "Usage: $0 <start,stop,status>"
 	exit
+}
+
+status()
+{
+	ps -p ${pid}
 }
 
 stop()
@@ -46,6 +51,7 @@ start()
 	echo "Trying to log to ${logfile}"
 
 	cd ${root}
+        echo "starting ${name} at $(date)" > ${logfile}
         ${py} ${name}.py ${param} > ${logfile} 2>&1 &
 	pid=$!
 	cd -
@@ -67,6 +73,8 @@ elif [ "$1" = "stop" ] ; then
 	stop
 elif [ "$1" = "start" ] ; then
 	start
+elif [ "$1" = "status" ] ; then
+	status
 else
 	echo "not the correct keywords."
 	usage
